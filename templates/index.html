@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Travel Planning Assistant | FAISS & Nomic Embeddings</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS for Interactive Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Chart.js for Budget Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-50 glass-panel border-b border-slate-200/80 shadow-sm no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white text-xl shadow-md">
+                    <i class="fa-solid fa-plane-departure"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg text-slate-900 leading-tight">WanderWise AI</h1>
+                    <p class="text-[11px] font-semibold text-indigo-600 flex items-center space-x-1.5">
+                        <span>Project 7 • Travel Planning Assistant</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Vector & API Stack Badges -->
+            <div class="hidden md:flex items-center space-x-3" id="system-stats-badge">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                    <i class="fa-solid fa-database mr-1.5 text-[10px]"></i> FAISS Vector DB
+                </span>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                    <i class="fa-solid fa-brain mr-1.5 text-[10px]"></i> nomic-embed-text (768-dim)
+                </span>
+            </div>
+
+            <!-- Quick Action Links -->
+            <div class="flex items-center space-x-2">
+                <button onclick="printItinerary()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm transition-all flex items-center space-x-1.5">
+                    <i class="fa-solid fa-file-pdf text-rose-500"></i>
+                    <span>Export / Print</span>
+                </button>
+                <button onclick="copyItineraryText()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all flex items-center space-x-1.5">
+                    <i class="fa-regular fa-copy"></i>
+                    <span>Copy Text</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        <!-- Hero & Trip Configurator Card -->
+        <section class="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm relative no-print">
+            <div class="max-w-3xl mb-6">
+                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100 inline-block mb-2">
+                    AI Travel Engine • FAISS + nomic-embed-text
+                </span>
+                <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    Plan Your Perfect 3-Day Journey Within Budget
+                </h2>
+                <p class="text-sm text-slate-600 mt-1">
+                    Powered by FAISS vector similarity search, live Open-Meteo weather forecasts, real Places coordinates, and smart expense allocation.
+                </p>
+            </div>
+
+            <!-- 1-Click Popular Presets -->
+            <div class="mb-6">
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                    Popular 3-Day Trips (1-Click Presets):
+                </label>
+                <div class="flex flex-wrap gap-2" id="preset-chips">
+                    <!-- Loaded dynamically via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Trip Form -->
+            <form id="trip-form" class="space-y-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Destination -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                            <i class="fa-solid fa-location-dot text-indigo-500 mr-1"></i> Destination City
+                        </label>
+                        <input type="text" id="input-destination" value="Tokyo" placeholder="e.g. Tokyo, Paris, Rome, Bali..."
+                            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-semibold text-slate-800 transition-all bg-white" required>
+                    </div>
+
+                    <!-- Budget -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                            <i class="fa-solid fa-wallet text-emerald-500 mr-1"></i> Total Trip Budget
+                        </label>
+                        <div class="relative">
+                            <input type="number" id="input-budget" value="950" min="100" max="50000" step="50"
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-semibold text-slate-800 transition-all bg-white" required>
+                        </div>
+                    </div>
+
+                    <!-- Currency -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                            <i class="fa-solid fa-coins text-amber-500 mr-1"></i> Currency
+                        </label>
+                        <select id="input-currency" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-semibold text-slate-800 transition-all bg-white">
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="GBP">GBP (£)</option>
+                            <option value="JPY">JPY (¥)</option>
+                            <option value="INR">INR (₹)</option>
+                            <option value="AUD">AUD (A$)</option>
+                            <option value="CAD">CAD (C$)</option>
+                        </select>
+                    </div>
+
+                    <!-- Travelers -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                            <i class="fa-solid fa-user-group text-sky-500 mr-1"></i> Travelers Count
+                        </label>
+                        <select id="input-travelers" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-semibold text-slate-800 transition-all bg-white">
+                            <option value="1">1 Person (Solo)</option>
+                            <option value="2">2 Persons (Couple / Friends)</option>
+                            <option value="3">3 Persons (Group)</option>
+                            <option value="4">4 Persons (Family)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Travel Style & Interests -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2 border-t border-slate-200/80">
+                    <!-- Style Radio -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-2">
+                            Traveler Style & Budget Preference:
+                        </label>
+                        <div class="grid grid-cols-3 gap-2.5">
+                            <label class="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-indigo-400 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/50 transition-all text-center">
+                                <input type="radio" name="travel_style" value="budget" class="hidden">
+                                <span class="text-lg">🎒</span>
+                                <span class="text-xs font-bold text-slate-800 mt-1">Backpacker</span>
+                                <span class="text-[10px] text-slate-500">Hostel & Street Food</span>
+                            </label>
+                            <label class="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-indigo-400 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/50 transition-all text-center">
+                                <input type="radio" name="travel_style" value="balanced" checked class="hidden">
+                                <span class="text-lg">🧭</span>
+                                <span class="text-xs font-bold text-slate-800 mt-1">Balanced</span>
+                                <span class="text-[10px] text-slate-500">Boutique & Highlights</span>
+                            </label>
+                            <label class="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200 cursor-pointer hover:border-indigo-400 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/50 transition-all text-center">
+                                <input type="radio" name="travel_style" value="luxury" class="hidden">
+                                <span class="text-lg">✨</span>
+                                <span class="text-xs font-bold text-slate-800 mt-1">Luxury</span>
+                                <span class="text-[10px] text-slate-500">Fine Dining & Hotels</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Interest Checkboxes -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-2">
+                            Trip Interests (Used for Vector Matching):
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            <label class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:border-indigo-400 has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:checked]:border-indigo-600 cursor-pointer transition-all">
+                                <input type="checkbox" value="Culture" checked class="interest-checkbox hidden">
+                                <span>🏛️ Culture & History</span>
+                            </label>
+                            <label class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:border-indigo-400 has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:checked]:border-indigo-600 cursor-pointer transition-all">
+                                <input type="checkbox" value="Food" checked class="interest-checkbox hidden">
+                                <span>🍜 Street Food & Dining</span>
+                            </label>
+                            <label class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:border-indigo-400 has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:checked]:border-indigo-600 cursor-pointer transition-all">
+                                <input type="checkbox" value="Sightseeing" checked class="interest-checkbox hidden">
+                                <span>📸 Viewpoints & Icons</span>
+                            </label>
+                            <label class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:border-indigo-400 has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:checked]:border-indigo-600 cursor-pointer transition-all">
+                                <input type="checkbox" value="Nature" class="interest-checkbox hidden">
+                                <span>🌿 Parks & Nature</span>
+                            </label>
+                            <label class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:border-indigo-400 has-[:checked]:bg-indigo-600 has-[:checked]:text-white has-[:checked]:border-indigo-600 cursor-pointer transition-all">
+                                <input type="checkbox" value="Nightlife" class="interest-checkbox hidden">
+                                <span>🍸 Nightlife & Bars</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex items-center justify-end pt-2">
+                    <button type="submit" class="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-bold text-sm shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>Generate 3-Day Itinerary</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Loading Animated State -->
+        <div id="loading-state" class="hidden glass-panel rounded-2xl p-8 border border-indigo-100 text-center space-y-4">
+            <div class="inline-block p-4 rounded-2xl bg-indigo-50 text-indigo-600 text-3xl loading-pulse">
+                <i class="fa-solid fa-compass fa-spin"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800" id="loading-status-text">
+                Initializing Vector Retrieval & Weather APIs...
+            </h3>
+            <p class="text-xs text-slate-500 max-w-md mx-auto">
+                Running nomic-embed-text 768-dimensional cosine vector similarity search in FAISS and fetching live 3-day meteorological data.
+            </p>
+        </div>
+
+        <!-- Results Section Dashboard -->
+        <div id="results-section" class="space-y-6">
+
+            <!-- Summary KPI Banner -->
+            <div class="glass-card rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div>
+                    <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span id="overview-vibe-badge" class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-indigo-100 text-indigo-700">BALANCED</span>
+                        <span id="overview-travelers-badge" class="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600">1 Traveler</span>
+                        <div id="overview-budget-badge" class="px-3 py-1 rounded-full text-xs font-bold inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800">
+                            <span>✓</span>
+                            <span>Well Within Budget</span>
+                        </div>
+                    </div>
+                    <h2 class="text-2xl font-black text-slate-900" id="overview-destination-title">
+                        Tokyo 3-Day Smart Itinerary
+                    </h2>
+                </div>
+
+                <!-- Financial Metric Blocks -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Budget</span>
+                        <span class="text-base font-extrabold text-slate-900" id="stat-total-budget">$950</span>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Estimated Spend</span>
+                        <span class="text-base font-extrabold text-indigo-600" id="stat-estimated-spend">$785</span>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Daily Burn</span>
+                        <span class="text-base font-extrabold text-slate-800" id="stat-daily-burn">$261/day</span>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Per Person</span>
+                        <span class="text-base font-extrabold text-emerald-600" id="stat-per-person">$785</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Tabs Navigation -->
+            <div class="border-b border-slate-200 no-print">
+                <nav class="flex space-x-2 sm:space-x-8 overflow-x-auto pb-1" aria-label="Tabs">
+                    <button data-tab="itinerary" class="nav-tab-btn active border-indigo-600 text-indigo-600 py-3 px-1 border-b-2 font-bold text-sm whitespace-nowrap flex items-center space-x-2">
+                        <i class="fa-solid fa-calendar-days"></i>
+                        <span>3-Day Visual Itinerary</span>
+                    </button>
+                    <button data-tab="map" class="nav-tab-btn border-transparent text-slate-500 hover:text-slate-700 py-3 px-1 border-b-2 font-bold text-sm whitespace-nowrap flex items-center space-x-2">
+                        <i class="fa-solid fa-map-location-dot"></i>
+                        <span>Interactive Map & Places</span>
+                    </button>
+                    <button data-tab="weather" class="nav-tab-btn border-transparent text-slate-500 hover:text-slate-700 py-3 px-1 border-b-2 font-bold text-sm whitespace-nowrap flex items-center space-x-2">
+                        <i class="fa-solid fa-cloud-sun"></i>
+                        <span>Live Weather & Packing</span>
+                    </button>
+                    <button data-tab="calculator" class="nav-tab-btn border-transparent text-slate-500 hover:text-slate-700 py-3 px-1 border-b-2 font-bold text-sm whitespace-nowrap flex items-center space-x-2">
+                        <i class="fa-solid fa-calculator"></i>
+                        <span>Budget Calculator & Sliders</span>
+                    </button>
+                    <button data-tab="faiss" class="nav-tab-btn border-transparent text-slate-500 hover:text-slate-700 py-3 px-1 border-b-2 font-bold text-sm whitespace-nowrap flex items-center space-x-2">
+                        <i class="fa-solid fa-brain"></i>
+                        <span>FAISS Vector DB Inspector</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- TAB 1: 3-DAY ITINERARY CARDS -->
+            <div id="tab-itinerary" class="tab-content-panel space-y-6">
+                <div id="days-container">
+                    <!-- Day Cards rendered dynamically -->
+                </div>
+            </div>
+
+            <!-- TAB 2: INTERACTIVE MAP & PLACES -->
+            <div id="tab-map" class="tab-content-panel hidden space-y-4">
+                <div class="glass-card rounded-2xl p-4 border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-3 px-2">
+                        <div>
+                            <h3 class="font-bold text-base text-slate-800">Geographic POI & Route Visualization</h3>
+                            <p class="text-xs text-slate-500">Day 1 (Blue) • Day 2 (Green) • Day 3 (Amber) with OpenStreetMap POI markers</p>
+                        </div>
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded bg-slate-100 text-slate-600">
+                            Powered by Places API & Leaflet
+                        </span>
+                    </div>
+                    <div id="map"></div>
+                </div>
+            </div>
+
+            <!-- TAB 3: LIVE WEATHER & PACKING -->
+            <div id="tab-weather" class="tab-content-panel hidden space-y-6">
+                <div class="glass-card rounded-2xl p-6 border border-slate-200 shadow-sm">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <div class="w-9 h-9 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-temperature-half"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-base text-slate-800">Live 3-Day Meteorological Intelligence</h3>
+                            <p class="text-xs text-slate-500">Real-time forecasts retrieved via Open-Meteo API</p>
+                        </div>
+                    </div>
+
+                    <!-- Clothing Advice Alert -->
+                    <div class="p-4 rounded-xl bg-indigo-50/70 border border-indigo-100 text-xs text-indigo-900 flex items-start space-x-2.5 mb-6">
+                        <span class="text-base">🧳</span>
+                        <div>
+                            <strong class="font-bold">Smart Packing & Apparel Advice:</strong>
+                            <p class="mt-0.5 leading-relaxed" id="weather-advice-text">
+                                Pack comfortable travel layers and sturdy walking shoes.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 3-Day Cards Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="weather-cards-container">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: BUDGET CALCULATOR & SLIDERS -->
+            <div id="tab-calculator" class="tab-content-panel hidden space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Left: Sliders -->
+                    <div class="lg:col-span-7 glass-card rounded-2xl p-6 border border-slate-200 shadow-sm space-y-5">
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <div>
+                                <h3 class="font-bold text-base text-slate-800">Dynamic Financial Calculator</h3>
+                                <p class="text-xs text-slate-500">Adjust expense parameters to recalculate your 3-day budget live</p>
+                            </div>
+                            <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">Live Recalculation</span>
+                        </div>
+
+                        <!-- Slider 1: Accommodation -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-xs font-bold text-slate-700">
+                                <span>Hotel / Accommodation (Per Night)</span>
+                                <span class="text-indigo-600" id="slider-acc-val">$65/night</span>
+                            </div>
+                            <input type="range" id="slider-acc" min="20" max="400" step="5" value="65"
+                                class="w-full accent-indigo-600 cursor-pointer">
+                        </div>
+
+                        <!-- Slider 2: Dining -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-xs font-bold text-slate-700">
+                                <span>Dining & Food (Per Day)</span>
+                                <span class="text-indigo-600" id="slider-dining-val">$35/day</span>
+                            </div>
+                            <input type="range" id="slider-dining" min="10" max="200" step="5" value="35"
+                                class="w-full accent-indigo-600 cursor-pointer">
+                        </div>
+
+                        <!-- Slider 3: Attractions -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-xs font-bold text-slate-700">
+                                <span>Attraction & Museum Passes (Total)</span>
+                                <span class="text-indigo-600" id="slider-attractions-val">$60</span>
+                            </div>
+                            <input type="range" id="slider-attractions" min="0" max="300" step="5" value="60"
+                                class="w-full accent-indigo-600 cursor-pointer">
+                        </div>
+
+                        <!-- Slider 4: Transportation -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-xs font-bold text-slate-700">
+                                <span>Metro / Transit Pass (Total)</span>
+                                <span class="text-indigo-600" id="slider-transport-val">$25</span>
+                            </div>
+                            <input type="range" id="slider-transport" min="5" max="150" step="5" value="25"
+                                class="w-full accent-indigo-600 cursor-pointer">
+                        </div>
+
+                        <!-- Slider 5: Contingency -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-xs font-bold text-slate-700">
+                                <span>Emergency Contingency Reserve</span>
+                                <span class="text-indigo-600" id="slider-contingency-val">10%</span>
+                            </div>
+                            <input type="range" id="slider-contingency" min="0" max="25" step="1" value="10"
+                                class="w-full accent-indigo-600 cursor-pointer">
+                        </div>
+
+                        <div class="pt-2">
+                            <div class="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 space-y-1">
+                                <div class="font-bold text-slate-700">💡 Smart Budget Principle:</div>
+                                <div>• 3-day accommodation is calculated across 3 nights.</div>
+                                <div>• Meals account for 3 full days per traveler.</div>
+                                <div>• 10% contingency buffer protects against price surges and emergencies.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Doughnut Chart & Itemized Breakdown -->
+                    <div class="lg:col-span-5 glass-card rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <h3 class="font-bold text-base text-slate-800 mb-3">Itemized Expense Allocation</h3>
+                            <div class="h-56 relative flex items-center justify-center">
+                                <canvas id="budgetChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="space-y-2 mt-4" id="budget-breakdown-list">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: FAISS VECTOR DB INSPECTOR -->
+            <div id="tab-faiss" class="tab-content-panel hidden space-y-6">
+                <div class="glass-card rounded-2xl p-6 border border-slate-200 shadow-sm space-y-6">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">
+                                <i class="fa-solid fa-network-wired"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-base text-slate-800">FAISS Vector Search Audit Trail</h3>
+                                <p class="text-xs text-slate-500">Document chunks retrieved from FAISS Index using nomic-embed-text (768-dim)</p>
+                            </div>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                            Index: FlatIP (Cosine Sim)
+                        </span>
+                    </div>
+
+                    <!-- Audit Trail List -->
+                    <div class="space-y-3" id="faiss-audit-list">
+                        <!-- Populated by JavaScript -->
+                    </div>
+
+                    <!-- Interactive Vector Search Sandbox -->
+                    <div class="p-5 rounded-xl bg-slate-50/80 border border-slate-200 space-y-3">
+                        <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Interactive Vector Query Sandbox:
+                        </h4>
+                        <div class="flex gap-2">
+                            <input type="text" id="input-vector-sandbox" placeholder="e.g. ramen dinner in tokyo under $15"
+                                class="flex-1 px-3 py-2 rounded-lg border border-slate-300 text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500 bg-white">
+                            <button id="btn-vector-query" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition-all flex items-center space-x-1">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <span>FAISS Search</span>
+                            </button>
+                        </div>
+                        <div id="sandbox-query-results"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="max-w-7xl mx-auto px-4 py-8 border-t border-slate-200/80 text-center text-xs text-slate-500 no-print">
+        <p>Project 7 • Travel Planning Assistant | Built with Flask, FAISS, nomic-embed-text, Open-Meteo Weather API & OpenStreetMap</p>
+    </footer>
+
+    <!-- Client Script -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
